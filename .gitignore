@@ -12,3 +12,5 @@ certificates
 media
 .env
 assets
+
+pdf_upload

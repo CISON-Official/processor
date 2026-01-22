@@ -16,12 +16,15 @@ class CertificatePayload(BaseModel):
     name: str
     certificate_name: str
     clean: str
-
+    membership_id: str
+    certificate_id: str
 
 user = CertificatePayload(
     name="Fidelugwuowo Dilibe",
     certificate_name="Working man",
-    clean="lafuging"
+    clean="lafuging",
+    membership_id="130932",
+    certificate_id="1234223",
 )
 
 task_id = str(uuid.uuid4())

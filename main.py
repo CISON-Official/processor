@@ -7,7 +7,7 @@ from celery import Celery
 from celery.schedules import crontab
 from kombu import Exchange, Queue
 
-from src.tasks.certification import create_certificates_task
+from src.tasks.certification import create_membership_certificate
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -87,4 +87,4 @@ def resilient_task(self):
     print(f"Attempt {self.request.retries + 1}")
     raise Exception("Temporary failure")
 
-create_certificates_task(app)
+create_membership_certificate(app)

@@ -3,8 +3,8 @@
 import logging
 from typing import Any
 from pathlib import Path
-from datetime import datetime, timezone
 from tempfile import NamedTemporaryFile
+from datetime import datetime, timezone, timedelta
 
 from celery import Celery
 from PIL import Image, ImageDraw, ImageFont
@@ -30,21 +30,44 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
     Returns:
         str: Path to the generated certificate file
     """
+
+    def add_custom(
+        img: Image.Image,  # Add this parameter
+        draw: ImageDraw.ImageDraw,
+        font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+        text: str,
+        position: tuple[int, int],
+        rotated: bool = False,
+    ) -> None:
+        if rotated:
+            bbox = font.getbbox(text)
+            text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            text_image = Image.new(
+                "RGBA", (text_width + 300, text_height + 30), (0, 0, 0, 0)
+            )
+            draw_text = ImageDraw.Draw(text_image)
+            draw_text.text(
+                (0, 0), text=text, font=font, fill="black"
+            )  # Also fixed this line
+            rotated_text = text_image.rotate(90.0, expand=True)
+            img.paste(rotated_text, position, rotated_text)  # Complete line 48
+            return
+        draw.text(position, text, "black", font, spacing=2)
+
     person_name = data.get("name")
-    certificate_title = data.get("certificate_name", "")
 
     if not person_name:
         raise ValueError("Missing required field: 'name'")
 
     name_length = len(person_name)
     if name_length <= 30:
-        font_size = 60
+        font_size = 80
     elif name_length <= 40:
-        font_size = 50
+        font_size = 70
     elif name_length <= 50:
-        font_size = 40
+        font_size = 60
     else:
-        font_size = 35
+        font_size = 50
 
     try:
         font = ImageFont.truetype(
@@ -55,8 +78,8 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
         font = ImageFont.load_default(font_size)
         print("Warning: arial.ttf not found, using default font.")
 
-    text_position = (300, 400)
-    template_path = BASE_DIR / Path("assets/media/certificate_template.png")
+    text_position = (130, 490)
+    template_path = BASE_DIR / Path("assets/media/new_certificate_template.jpg")
     if not template_path.exists():
         raise FileNotFoundError(
             "Certificate template not found: certificate_template.png",
@@ -67,45 +90,61 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
         img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
         stroke_width = 1
-        stroke_fill = "green"
+        stroke_fill = "#1A693D"
 
         draw.text(
             text_position,
-            person_name.strip(),
+            person_name.strip().upper(),
             font=font,
-            fill="green",
+            fill="#1A693D",
             stroke_width=stroke_width,
             stroke_fill=stroke_fill,
-            anchor="mm",
+            # anchor="mm",
         )
 
-        small_font_size = 30
-        small_font = ImageFont.load_default()
+        small_font_size = 22
+        small_font = ImageFont.load_default(small_font_size)
 
-        if certificate_title:
-            draw.text(
-                (500, 600),
-                certificate_title,
-                font=small_font,
-                fill="black",
-                anchor="mm",
-            )
+        current_date = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+        expiry_date = datetime.now(timezone.utc) + timedelta(days=730)
+        expiry_date = expiry_date.strftime("%d/%m/%Y")
 
-        current_date = datetime.now(timezone.utc).strftime("%B %d, %Y")
-        draw.text(
-            (500, 1000),
-            f"Date: {current_date}",
-            font=small_font,
-            fill="gray",
-            anchor="mm",
-        )
+        width, height = img.size
+        height = 987
+
+        membership_id = str(data.get("membership_id"))
+        certificate_id = str(data.get("certificate_id"))
+
+        add_custom(
+            img, draw, small_font, membership_id, (130, height)
+        )  # For membership ID
+        add_custom(
+            img,
+            draw,
+            small_font,
+            "2025-" + str(data.get("certificate_id")),
+            (605, 1000),
+        )  # For Certificate ID
+        add_custom(img, draw, small_font, current_date, (970, height))  # For Issue date
+        add_custom(
+            img, draw, small_font, expiry_date, (1484, 500), True
+        )  # For Expiry date
 
         output_path = Path(
             f"certificates/{person_name.replace(' ', '_')}_certificate.png"
         )
+        img.save(output_path, "PNG")
+
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        output_path_pdf = Path(f"pdf_upload/certificate_2025-{certificate_id}.pdf")
+
+        output_path_pdf.parent.mkdir(parents=True, exist_ok=True)
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        img.save(output_path, "PNG")
+        img.save(output_path_pdf, "PDF", resolution=100.0)
 
     upload_certificate_to_folder(output_path)
 
@@ -126,7 +165,7 @@ def upload_certificate_to_folder(certificate_path: str | Path):
     print(f"Uploaded certificate: {certificate_path}")
 
 
-def create_certificates_task(app: Celery):
+def create_membership_certificate(app: Celery):
     logger = get_task_logger(__name__)
     logger.info("Task created")
 
