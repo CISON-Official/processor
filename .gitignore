@@ -13,4 +13,5 @@ media
 .env
 assets
 
-pdf_upload
+pdf_upload*
+logs
