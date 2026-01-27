@@ -43,7 +43,7 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
             bbox = font.getbbox(text)
             text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
             text_image = Image.new(
-                "RGBA", (text_width + 300, text_height + 30), (0, 0, 0, 0)
+                "RGBA", (int(text_width + 300), int(text_height + 30)), (0, 0, 0, 0)
             )
             draw_text = ImageDraw.Draw(text_image)
             draw_text.text(
@@ -71,7 +71,7 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
 
     try:
         font = ImageFont.truetype(
-            BASE_DIR / Path("assets/fonts/Dynalight-Regular.ttf"), font_size
+            BASE_DIR / Path("assets/fonts/Birthstone-Regular.ttf"), font_size
         )
     except OSError:
 
@@ -105,9 +105,14 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
         small_font_size = 22
         small_font = ImageFont.load_default(small_font_size)
 
-        current_date = datetime.now(timezone.utc).strftime("%d/%m/%Y")
-        expiry_date = datetime.now(timezone.utc) + timedelta(days=730)
-        expiry_date = expiry_date.strftime("%d/%m/%Y")
+        current_date = data.get('current_date')
+        if not current_date:
+            current_date = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+        
+        expiry_date = data.get('expiry_date')
+        if not expiry_date:
+            expiry_date = datetime.strptime(current_date, "%d/%m/%Y")+ timedelta(days=730)
+            expiry_date = expiry_date.strftime("%d/%m/%Y")
 
         width, height = img.size
         height = 987
@@ -122,7 +127,7 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
             img,
             draw,
             small_font,
-            "2025-" + str(data.get("certificate_id")),
+            str(data.get("certificate_id")),
             (605, 1000),
         )  # For Certificate ID
         add_custom(img, draw, small_font, current_date, (970, height))  # For Issue date
@@ -138,7 +143,7 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
 
-        output_path_pdf = Path(f"pdf_upload/certificate_2025-{certificate_id}.pdf")
+        output_path_pdf = Path(f"pdf_upload/certificate_{data.get("certificate_id")}.pdf")
 
         output_path_pdf.parent.mkdir(parents=True, exist_ok=True)
 
@@ -176,6 +181,9 @@ def create_membership_certificate(app: Celery):
         retry_backoff=True,
         retry_jitter=True,
         retry_kwargs={"max_retries": 5},
+        max_retries=5,
+        acks_late=True,
+        reject_on_worker_lost=True,
     )
     def create_certificates(self, **kwargs):
         logger.info("Performing Task")
