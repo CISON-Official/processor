@@ -19,6 +19,9 @@ from src.tasks.conference import create_conference_certificate
 from src.tasks.certification import create_membership_certificate
 from src.tasks.preconference import create_preconference_certificate
 from src.tasks.email import create_email
+from src.tasks.first_prs import create_first_prs_2026_certificate
+
+
 
 # -------------------------------------------------------------------
 # Base config
@@ -76,6 +79,12 @@ app.conf.task_queues = (
         "2025_certification",
         exchange=certification_exchange,
         routing_key="certification",
+        queue_arguments=QUEUE_ARGUMENTS,
+    ),
+    Queue(
+        "2026_first_prs",
+        exchange=certification_exchange,
+        routing_key="first_prs",
         queue_arguments=QUEUE_ARGUMENTS,
     ),
     Queue(
@@ -171,3 +180,4 @@ create_membership_certificate(app)
 create_conference_certificate(app)
 create_preconference_certificate(app)
 create_email(app)
+create_first_prs_2026_certificate(app)
