@@ -3,15 +3,22 @@ from pathlib import Path
 from typing import Callable
 
 from celery import Celery
+from decouple import config
 from PIL import ImageFont, Image, ImageDraw
 from celery.utils.log import get_task_logger
+
+from src.custom_email import ZohoEmailer
+from src.template import EmailTemplate
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 logger = get_task_logger(__name__)
 
+email_username = str(config("EMAIL_USERNAME"))
+email_password = str(config("EMAIL_PASSWORD"))
 
-def custom_task(data: dict[str, str]) -> None:
+
+def custom_task(data: dict[str, str]) -> str:
     person_name = data.get("name")
     email = data.get("email")
 
@@ -76,6 +83,18 @@ def custom_task(data: dict[str, str]) -> None:
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(output_path, "PDF", resolution=100.0)
+
+        mailer = ZohoEmailer(email_username, email_password)
+        mailer.send_email(
+            str(email),
+            "CISON 2026 PRS Certificate",
+            html_body=EmailTemplate.first_prs_template(),
+            attachments=[str(output_path)],
+        )
+
+    return str(output_path)
+
+
 
 
 def create_first_prs_2026_certificate(app: Celery) -> Callable:
