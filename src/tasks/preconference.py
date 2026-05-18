@@ -88,13 +88,13 @@ def generate_2025_preconference_certificate(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(output_path, "PDF", resolution=100.0)
 
-        # mailer = ZohoEmailer(email_username, email_password)
-        # mailer.send_email(
-        #     str(email),
-        #     "Preconference Certificate",
-        #     html_body=EmailTemplate.preconference_template(str(first_name)),
-        #     attachments=[str(output_path)],
-        # )
+        mailer = ZohoEmailer(email_username, email_password)
+        mailer.send_email(
+            str(email),
+            "Preconference Certificate",
+            html_body=EmailTemplate.preconference_template(str(first_name)),
+            attachments=[str(output_path)],
+        )
 
     return str(output_path)
 

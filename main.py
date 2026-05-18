@@ -20,6 +20,8 @@ from src.tasks.certification import create_membership_certificate
 from src.tasks.preconference import create_preconference_certificate
 from src.tasks.email import create_email
 from src.tasks.first_prs import create_first_prs_2026_certificate
+from src.tasks.campaign import create_campaign_email
+
 
 
 
@@ -181,3 +183,4 @@ create_conference_certificate(app)
 create_preconference_certificate(app)
 create_email(app)
 create_first_prs_2026_certificate(app)
+create_campaign_email(app)
