@@ -15,3 +15,4 @@ assets
 
 pdf_upload*
 logs
+*.php
