@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+import hashlib
+import uuid
+import hmac
+import string
+import random
 from pathlib import Path
 
 from typing import Any
@@ -7,10 +12,10 @@ from decouple import config
 from PIL import ImageFont, Image, ImageDraw
 from celery.utils.log import get_task_logger
 
+from src.api_caller import create_certification
 from src.template import EmailTemplate
 from src.custom_email import ZohoEmailer
 from src.custom_draw import add_custom_text
-
 
 email_username = str(config("EMAIL_USERNAME"))
 email_password = str(config("EMAIL_PASSWORD"))
@@ -21,6 +26,13 @@ logger = get_task_logger(__name__)
 
 
 def generate_2025_conference_certificate(data: dict[str, Any]) -> str:
+    key = str(config("CERT_AUTH_KEY", "CERT_AUTH_KEY")).encode()
+    message = (
+        "".join([str(uuid.uuid4()) for _ in range(2)])
+        .replace("-", random.choice(list(string.ascii_letters)))
+        .encode()
+    )
+    hmac_key = hmac.new(key, message, hashlib.sha256).hexdigest()
 
     person_name = data.get("name")
     email = data.get("email")
@@ -85,13 +97,21 @@ def generate_2025_conference_certificate(data: dict[str, Any]) -> str:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(output_path, "PDF", resolution=100.0)
 
-        mailer = ZohoEmailer(email_username, email_password)
-        mailer.send_email(
-            str(email),
-            "Conference Certificate",
-            html_body=EmailTemplate.conference_template(str(first_name)),
-            attachments=[str(output_path)],
-        )
+        # mailer = ZohoEmailer(email_username, email_password)
+        # mailer.send_email(
+        #     str(email),
+        #     "Conference Certificate",
+        #     html_body=EmailTemplate.conference_template(str(first_name)),
+        #     attachments=[str(output_path)],
+        # )
+    create_certification(
+        f"2025 Conference Certificate",
+        output_path,
+        message,
+        hmac_key,
+        data.get("name"),
+        data.get("email"),
+    )
 
     return str(output_path)
 

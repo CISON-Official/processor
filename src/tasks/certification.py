@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import uuid
+import hmac
+import random
+import string
+import hashlib
 import logging
 from typing import Any
 from pathlib import Path
@@ -7,11 +12,13 @@ from tempfile import NamedTemporaryFile
 from datetime import datetime, timezone, timedelta
 
 from celery import Celery
+from decouple import config
 from PIL import Image, ImageDraw, ImageFont
 from celery.utils.log import get_task_logger
 
 from src.tasks.schema import CertificatePayload
-
+from src.api_caller import create_certification
+from src.qr_generator import generate_qr_image, add_qr_to_template
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 logger = get_task_logger(__name__)
@@ -30,6 +37,14 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
     Returns:
         str: Path to the generated certificate file
     """
+
+    key = str(config("CERT_AUTH_KEY", "CERT_AUTH_KEY")).encode()
+    message = (
+        "".join([str(uuid.uuid4()) for _ in range(2)])
+        .replace("-", random.choice(list(string.ascii_letters)))
+        .encode()
+    )
+    hmac_key = hmac.new(key, message, hashlib.sha256).hexdigest()
 
     def add_custom(
         img: Image.Image,  # Add this parameter
@@ -105,13 +120,15 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
         small_font_size = 22
         small_font = ImageFont.load_default(small_font_size)
 
-        current_date = data.get('current_date')
+        current_date = data.get("current_date")
         if not current_date:
             current_date = datetime.now(timezone.utc).strftime("%d/%m/%Y")
-        
-        expiry_date = data.get('expiry_date')
+
+        expiry_date = data.get("expiry_date")
         if not expiry_date:
-            expiry_date = datetime.strptime(current_date, "%d/%m/%Y")+ timedelta(days=730)
+            expiry_date = datetime.strptime(current_date, "%d/%m/%Y") + timedelta(
+                days=730
+            )
             expiry_date = expiry_date.strftime("%d/%m/%Y")
 
         width, height = img.size
@@ -138,12 +155,21 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
         output_path = Path(
             f"certificates/{person_name.replace(' ', '_')}_certificate.png"
         )
+        certificate_url = str(config("CERTIFICATE_URL"))
+
+        url = f"{certificate_url}?key={message.decode()}&hmac={hmac_key}"
+
+        qr = generate_qr_image(url)
+        add_qr_to_template(img, qr, 1372, 540, (100, 100))
+
         img.save(output_path, "PNG")
 
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
 
-        output_path_pdf = Path(f"pdf_upload/certificate_{data.get("certificate_id")}.pdf")
+        output_path_pdf = Path(
+            f"pdf_upload/certificate_{data.get("certificate_id")}.pdf"
+        )
 
         output_path_pdf.parent.mkdir(parents=True, exist_ok=True)
 
@@ -152,6 +178,15 @@ def generate_certificate_2025(data: dict[str, Any]) -> str:
         img.save(output_path_pdf, "PDF", resolution=100.0)
 
     upload_certificate_to_folder(output_path)
+    logger.warning(f"key: {key} message: {message} HMAC KEY: {hmac_key}")
+    # create_certification(
+    #     f"Membership Certificate {datetime.now(timezone.utc).year}",
+    #     output_path_pdf,
+    #     message,
+    #     hmac_key,
+    #     data.get("name"),
+    #     data.get("email"),
+    # )
 
     return str(output_path)
 
