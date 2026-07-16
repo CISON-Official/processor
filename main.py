@@ -21,9 +21,7 @@ from src.tasks.preconference import create_preconference_certificate
 from src.tasks.email import create_email
 from src.tasks.first_prs import create_first_prs_2026_certificate
 from src.tasks.campaign import create_campaign_email
-
-
-
+from src.tasks.second_prs import create_second_prs_2026_certificate
 
 # -------------------------------------------------------------------
 # Base config
@@ -40,21 +38,29 @@ logger = logging.getLogger(__name__)
 # Celery app
 # -------------------------------------------------------------------
 
-app = Celery("main", broker=BROKER_URL)
+# -------------------------------------------------------------------
+# Celery app
+# -------------------------------------------------------------------
 
+# Install redis via your virtual environment if selected: pip install redis
+app = Celery("main", broker=BROKER_URL, backend="redis://localhost:6379/0")
+app.conf.result_persistent = True
 app.conf.update(
     timezone=TIMEZONE,
     broker_pool_limit=1,
-
+    task_ignore_result=True,  # Suppresses result routing queues
+    worker_gossip=False,  # Disables gossip
+    worker_mingle=False,  # Disables startup synchronisation
+    实时_worker_heartbeat=False,  # Shuts down heartbeat monitor checks
     # Reliability
     task_acks_late=True,
+    worker_max_memory_per_child=120000,
     task_reject_on_worker_lost=True,
     task_create_missing_queues=False,
-
-    # Result persistence
     result_expires=None,
     task_store_errors_even_if_ignored=True,
 )
+
 
 # -------------------------------------------------------------------
 # Exchanges & Queues (with DLQ)
@@ -67,7 +73,7 @@ dlx_exchange = Exchange("dlx", type="direct")
 QUEUE_ARGUMENTS = {
     "x-dead-letter-exchange": "dlx",
     "x-dead-letter-routing-key": "dead",
-    "x-message-ttl": 600_000,  # 10 minutes
+    "x-message-ttl": 600_000,
 }
 
 app.conf.task_queues = (
@@ -87,6 +93,12 @@ app.conf.task_queues = (
         "2026_first_prs",
         exchange=certification_exchange,
         routing_key="first_prs",
+        queue_arguments=QUEUE_ARGUMENTS,
+    ),
+    Queue(
+        "2026_second_prs",
+        exchange=certification_exchange,
+        routing_key="second_prs",
         queue_arguments=QUEUE_ARGUMENTS,
     ),
     Queue(
@@ -121,6 +133,7 @@ app.conf.beat_schedule = {
 # Logging hooks
 # -------------------------------------------------------------------
 
+
 @after_setup_logger.connect
 def configure_worker_logger(**_):
     setup_celery_logging()
@@ -130,18 +143,22 @@ def configure_worker_logger(**_):
 def configure_task_logger(**_):
     setup_celery_logging()
 
+
 # -------------------------------------------------------------------
 # Signals
 # -------------------------------------------------------------------
+
 
 @task_revoked.connect
 def handle_task_revoked(sender=None, request=None, **_):
     task_id = request.id if request else "unknown"
     logger.warning("Task revoked: %s", task_id)
 
+
 # -------------------------------------------------------------------
 # Example retry patterns
 # -------------------------------------------------------------------
+
 
 @app.task(bind=True, max_retries=5, acks_late=True, reject_on_worker_lost=True)
 def custom_retry_task(self):
@@ -151,7 +168,7 @@ def custom_retry_task(self):
         if self.request.retries >= self.max_retries:
             raise Reject(exc, requeue=False)
 
-        delay = min(2 ** self.request.retries, 60)
+        delay = min(2**self.request.retries, 60)
         jitter = random.uniform(0, delay * 0.3)
         raise self.retry(exc=exc, countdown=delay + jitter)
 
@@ -174,6 +191,7 @@ def resilient_task(self):
 
     raise Exception("Temporary failure")
 
+
 # -------------------------------------------------------------------
 # Task registration
 # -------------------------------------------------------------------
@@ -184,3 +202,4 @@ create_preconference_certificate(app)
 create_email(app)
 create_first_prs_2026_certificate(app)
 create_campaign_email(app)
+create_second_prs_2026_certificate(app)
